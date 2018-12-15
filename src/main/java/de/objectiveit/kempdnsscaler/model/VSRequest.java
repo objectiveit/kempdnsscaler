@@ -9,6 +9,7 @@ public class VSRequest {
     private VirtualService vs;
     private List<String> rsIPs;
     private int rsPort;
+    private String notificationTopicArn;
 
     public String getLoadBalancerURL() {
         return loadBalancerURL;
@@ -50,6 +51,14 @@ public class VSRequest {
         this.rsPort = rsPort;
     }
 
+    public String getNotificationTopicArn() {
+        return notificationTopicArn;
+    }
+
+    public void setNotificationTopicArn(String notificationTopicArn) {
+        this.notificationTopicArn = notificationTopicArn;
+    }
+
     @Override
     public String toString() {
         return "VSRequest{" +
@@ -58,6 +67,7 @@ public class VSRequest {
                 ", vs=" + vs +
                 ", rsIPs=" + rsIPs +
                 ", rsPort=" + rsPort +
+                ", notificationTopicArn='" + notificationTopicArn + '\'' +
                 '}';
     }
 

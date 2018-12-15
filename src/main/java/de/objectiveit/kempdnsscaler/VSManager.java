@@ -1,19 +1,19 @@
 package de.objectiveit.kempdnsscaler;
 
-import static de.objectiveit.kempdnsscaler.util.CollectionUtil.subtract;
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
+import de.objectiveit.kempdnsscaler.loadbalancer.LoadBalancer;
+import de.objectiveit.kempdnsscaler.loadbalancer.kemp.KEMPLoadMaster;
+import de.objectiveit.kempdnsscaler.model.VSRequest;
+import de.objectiveit.kempdnsscaler.model.VirtualService;
+import de.objectiveit.kempdnsscaler.util.ApplicationLogger;
+import de.objectiveit.kempdnsscaler.util.SNSNotifier;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.amazonaws.services.lambda.runtime.Context;
-import com.amazonaws.services.lambda.runtime.LambdaLogger;
-import com.amazonaws.services.lambda.runtime.RequestHandler;
-
-import de.objectiveit.kempdnsscaler.loadbalancer.LoadBalancer;
-import de.objectiveit.kempdnsscaler.loadbalancer.kemp.KEMPLoadMaster;
-import de.objectiveit.kempdnsscaler.model.VSRequest;
-import de.objectiveit.kempdnsscaler.model.VirtualService;
+import static de.objectiveit.kempdnsscaler.util.CollectionUtil.subtract;
 
 /**
  * Main AWS Lambda function class, which implements {@link RequestHandler} and
@@ -25,32 +25,53 @@ public class VSManager implements RequestHandler<VSRequest, String>
 	@Override
 	public String handleRequest(VSRequest request, Context context)
 	{
-		LambdaLogger logger = context.getLogger();
+        ApplicationLogger logger = new ApplicationLogger(context.getLogger());
 
-		try
+        logger.log("<<< Function:  " + context.getFunctionName() + "\n");
+        logger.log("<<< Version: " + context.getFunctionVersion() + "\n");
+        logger.log("<<< Log group: " + context.getLogGroupName() + "\n");
+        logger.log("<<< Log stream name " + context.getLogStreamName() + "\n");
+        logger.log("<<< Input : " + request + "\n\n");
+
+        try
 		{
-
-			logger.log("<<< Function:  " + context.getFunctionName());
-			logger.log("<<< Version: " + context.getFunctionVersion());
-			logger.log("<<< Log group: " + context.getLogGroupName());
-			logger.log("<<< Log stream name " + context.getLogStreamName());
-			logger.log("<<< Input : " + request + "\n");
-
+            // do the logic
 			if (request == null)
-				throw new ApplicationException("Empty input ");
+				throw new ApplicationException("Empty input");
+			String result = handlerRequest(logger, request);
 
-			return handlerRequest(logger, request);
-
+            doNotify(logger, "[kemmpdnsscaler] [Success] Result logs", request);
+            return result;
 		}
 		catch (Throwable t)
 		{
-			logger.log("Exception " + t.getMessage() + " with input :" + request);
+            logger.log("Exception " + t.getMessage() + " with input: " + request + "\n\n");
+            doNotify(logger, "[kemmpdnsscaler] [Error] Error logs", request);
+
 			throw t;
 		}
 	}
 
+    /**
+     * In case {@code notificationTopicArn} is provided - tries to send notification message.
+     * <p>
+     * This method will not throw exceptions.
+     */
+    private void doNotify(ApplicationLogger logger, String subject, VSRequest request) {
+        String topicArn = request == null ? null : request.getNotificationTopicArn();
+        if (topicArn != null) {
+            try {
+                SNSNotifier notifier = new SNSNotifier(topicArn);
+                String messageId = notifier.publishNotification(logger.getResultLogs(), subject);
+                logger.log("<<< Message ID: " + messageId + "\n");
+            } catch (Throwable t) {
+                // just need to log
+                logger.log("[Notification] Error occurred " + t.getMessage() + "\n");
+            }
+        }
+    }
 
-	private String handlerRequest(LambdaLogger logger, VSRequest request)
+    private String handlerRequest(ApplicationLogger logger, VSRequest request)
 	{
 		logger.log("<<< [Init] Initializing LoadBalancer interface...\n\n");
 		LoadBalancer loadBalancer = new KEMPLoadMaster(request.getLoadBalancerURL(), request.getCredentials());
@@ -83,10 +104,12 @@ public class VSManager implements RequestHandler<VSRequest, String>
 
 		// Return list of the result RS IPs:
 		List<String> resultIPs = loadBalancer.getRSList(vs);
+        logger.log("Finished, result RS IPs = " + resultIPs + "\n\n");
+
 		return "Finished, result RS IPs = " + resultIPs;
 	}
 
-	private List<String> step2Nslookup(LambdaLogger logger, List<String> desiredRSIPs)
+	private List<String> step2Nslookup(ApplicationLogger logger, List<String> desiredRSIPs)
 	{
 		logger.log("<<< [Step 2] Prepare list of desired IPs (do nslookup to replace FQDNs with IPs if any)...\n");
 		List<String> rsList = desiredRSIPs == null ? new ArrayList<>() : desiredRSIPs;
@@ -122,7 +145,7 @@ public class VSManager implements RequestHandler<VSRequest, String>
 		return rsIPs;
 	}
 
-	private int step4AddRSs(LambdaLogger logger, LoadBalancer loadBalancer, VirtualService vs, List<String> toAdd, int rsPort)
+	private int step4AddRSs(ApplicationLogger logger, LoadBalancer loadBalancer, VirtualService vs, List<String> toAdd, int rsPort)
 	{
 		int added = 0;
 		if (toAdd.isEmpty())
@@ -150,7 +173,7 @@ public class VSManager implements RequestHandler<VSRequest, String>
 		return added;
 	}
 
-	private void step5RemoveRSs(LambdaLogger logger, LoadBalancer loadBalancer, VirtualService vs, List<String> toRemove, int rsPort)
+	private void step5RemoveRSs(ApplicationLogger logger, LoadBalancer loadBalancer, VirtualService vs, List<String> toRemove, int rsPort)
 	{
 		if (toRemove.isEmpty())
 		{

@@ -5,14 +5,17 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import de.objectiveit.kempdnsscaler.loadbalancer.LoadBalancer;
 import de.objectiveit.kempdnsscaler.loadbalancer.kemp.KEMPLoadMaster;
 import de.objectiveit.kempdnsscaler.model.VSRequest;
+import de.objectiveit.kempdnsscaler.model.VSResponse;
 import de.objectiveit.kempdnsscaler.model.VirtualService;
 import de.objectiveit.kempdnsscaler.util.ApplicationLogger;
+import de.objectiveit.kempdnsscaler.util.CollectionUtil;
 import de.objectiveit.kempdnsscaler.util.SNSNotifier;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
+import static de.objectiveit.kempdnsscaler.model.VSResponse.response;
 import static de.objectiveit.kempdnsscaler.util.CollectionUtil.subtract;
 
 /**
@@ -38,11 +41,13 @@ public class VSManager implements RequestHandler<VSRequest, String>
             // do the logic
 			if (request == null)
 				throw new ApplicationException("Empty input");
-			String result = handlerRequest(logger, request);
+			VSResponse result = handlerRequest(logger, request);
 
-            doNotify(logger, "[kemmpdnsscaler] [Success] Result logs", request);
-            return result;
-		}
+            if (result.isChanged()) {
+                doNotify(logger, "[kemmpdnsscaler] [Success] Result logs", request);
+            }
+            return result.getResult();
+        }
 		catch (Throwable t)
 		{
             logger.log("Exception " + t.getMessage() + " with input: " + request + "\n\n");
@@ -71,7 +76,7 @@ public class VSManager implements RequestHandler<VSRequest, String>
         }
     }
 
-    private String handlerRequest(ApplicationLogger logger, VSRequest request)
+    private VSResponse handlerRequest(ApplicationLogger logger, VSRequest request)
 	{
 		logger.log("<<< [Init] Initializing LoadBalancer interface...\n\n");
 		LoadBalancer loadBalancer = new KEMPLoadMaster(request.getLoadBalancerURL(), request.getCredentials());
@@ -106,7 +111,8 @@ public class VSManager implements RequestHandler<VSRequest, String>
 		List<String> resultIPs = loadBalancer.getRSList(vs);
         logger.log("Finished, result RS IPs = " + resultIPs + "\n\n");
 
-		return "Finished, result RS IPs = " + resultIPs;
+        boolean changed = !CollectionUtil.equals(currentIPs, resultIPs);
+        return response(changed, "Finished, result RS IPs = " + resultIPs);
 	}
 
 	private List<String> step2Nslookup(ApplicationLogger logger, List<String> desiredRSIPs)

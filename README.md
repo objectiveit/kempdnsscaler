@@ -40,7 +40,7 @@ Please find parameters list and their descriptions in the table below:
 
 | Parameter | Description | Example |
 |:---|------|:----:|
-| `notificationTopicArn` | _Amazon SNS_ topic ARN to use for notifications (details below) | `"arn:aws:sns:eu-central-1:123456789012:NotificationTopic"` |
+| `notificationTopicArn` | _Amazon SNS_ topic ARN to use for notifications (details below). Notification will be sent only in case of changes (of VS configuration) and errors | `"arn:aws:sns:eu-central-1:123456789012:NotificationTopic"` |
 | `loadBalancerURL` | _LoadBalancer_ base URL, might be either FQDN or IP based | `"https://some.loadbalancer.de"`, `"http://12.13.14.15"` |
 | `credentials` | _LoadBalancer_ login and password, in case of _KEMP LoadMaster_ it is the [REST API basic auth credentials >>](https://support.kemptechnologies.com/hc/en-us/articles/203863435-RESTful-API#MadCap_TOC_6_2) | `{ "login": "admin", "password": "verysecret" }` |
 | `vs` | Parameters of the _Virtual Service_ to manage: IP, port and protocol | `{ "ip": "1.2.3.4", "port": 8080, "protocol": "tcp" }` |
